@@ -170,7 +170,11 @@ func (s *Server) handleConn(c *Conn) error {
 			if err == io.EOF {
 				return nil
 			}
-			s.ErrorLog.Printf("TLS handshake error for %s: %v", tlsConn.RemoteAddr(), err)
+			if err, ok := err.(*net.OpError); ok {
+				// preserve remote address from PROXY protocol
+				err.Addr = c.conn.RemoteAddr()
+			}
+			s.ErrorLog.Printf("TLS handshake error: %w", err)
 			return err
 		}
 	}
