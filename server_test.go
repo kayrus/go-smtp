@@ -293,7 +293,7 @@ func TestServerAcceptErrorHandling(t *testing.T) {
 	s := smtp.NewServer(be)
 	s.Domain = "localhost"
 	s.AllowInsecureAuth = true
-	s.ErrorLog = log.New(errorLog, "", 0)
+	s.ErrorLog = &smtp.DefaultLogger{log.New(errorLog, "", 0)}
 
 	l := newFailingListener()
 	var serveError error
@@ -435,7 +435,7 @@ func TestServerPanicRecover(t *testing.T) {
 
 	s.Backend.(*backend).panicOnMail = true
 	// Don't log panic in tests to not confuse people who run 'go test'.
-	s.ErrorLog = log.New(ioutil.Discard, "", 0)
+	s.ErrorLog = &smtp.DefaultLogger{log.New(ioutil.Discard, "", 0)}
 
 	io.WriteString(c, "MAIL FROM:<alice@wonderland.book>\r\n")
 	scanner.Scan()

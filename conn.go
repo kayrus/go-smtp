@@ -21,10 +21,11 @@ import (
 const errThreshold = 3
 
 type ConnectionState struct {
-	Hostname   string
-	LocalAddr  net.Addr
-	RemoteAddr net.Addr
-	TLS        tls.ConnectionState
+	ServerDomain string
+	Hostname     string
+	LocalAddr    net.Addr
+	RemoteAddr   net.Addr
+	TLS          tls.ConnectionState
 }
 
 type Conn struct {
@@ -101,12 +102,14 @@ func (c *Conn) handle(cmd string, arg string) {
 			c.Close()
 
 			stack := debug.Stack()
-			c.server.ErrorLog.Printf("panic serving %v: %v\n%s", c.State().RemoteAddr, err, stack)
+			c.server.ErrorLog.Printf(c, "panic serving %v: %w\n%s", c.State().RemoteAddr, err, stack)
 		}
 	}()
 
 	if cmd == "" {
-		c.protocolError(500, EnhancedCode{5, 5, 2}, "Error: bad syntax")
+		msg := "Error: bad syntax"
+		c.server.ErrorLog.Printf(c, "%s", msg)
+		c.protocolError(500, EnhancedCode{5, 5, 2}, msg)
 		return
 	}
 
@@ -147,7 +150,9 @@ func (c *Conn) handle(cmd string, arg string) {
 		c.Close()
 	case "AUTH":
 		if c.server.AuthDisabled {
-			c.protocolError(500, EnhancedCode{5, 5, 2}, "Syntax error, AUTH command unrecognized")
+			msg := "Syntax error, AUTH command unrecognized"
+			c.server.ErrorLog.Printf(c, "%s", msg)
+			c.protocolError(500, EnhancedCode{5, 5, 2}, msg)
 		} else {
 			c.handleAuth(arg)
 		}
@@ -155,6 +160,7 @@ func (c *Conn) handle(cmd string, arg string) {
 		c.handleStartTLS()
 	default:
 		msg := fmt.Sprintf("Syntax errors, %v command unrecognized", cmd)
+		c.server.ErrorLog.Printf(c, "%s", msg)
 		c.protocolError(500, EnhancedCode{5, 5, 2}, msg)
 	}
 }
@@ -210,6 +216,7 @@ func (c *Conn) State() ConnectionState {
 		state.TLS = tlsState
 	}
 
+	state.ServerDomain = c.server.Domain
 	state.Hostname = c.helo
 	state.LocalAddr = c.conn.LocalAddr()
 	state.RemoteAddr = c.conn.RemoteAddr()
@@ -616,7 +623,7 @@ func (c *Conn) handleStartTLS() {
 		if err == io.EOF {
 			return
 		}
-		c.server.ErrorLog.Printf("TLS handshake error for %s: %v", c.conn.RemoteAddr(), err)
+		c.server.ErrorLog.Printf(c, "TLS handshake error for %s: %w", c.State().RemoteAddr, err)
 		c.WriteResponse(550, EnhancedCode{5, 0, 0}, "Handshake error")
 		return
 	}
@@ -822,7 +829,7 @@ func (c *Conn) handlePanic(err interface{}, status *statusCollector) {
 	}
 
 	stack := debug.Stack()
-	c.server.ErrorLog.Printf("panic serving %v: %v\n%s", c.State().RemoteAddr, err, stack)
+	c.server.ErrorLog.Printf(c, "panic serving %v: %w\n%s", c.State().RemoteAddr, err, stack)
 }
 
 func (c *Conn) createStatusCollector() *statusCollector {
@@ -915,7 +922,7 @@ func (c *Conn) handleDataLMTP() {
 					})
 
 					stack := debug.Stack()
-					c.server.ErrorLog.Printf("panic serving %v: %v\n%s", c.State().RemoteAddr, err, stack)
+					c.server.ErrorLog.Printf(c, "panic serving %v: %w\n%s", c.State().RemoteAddr, err, stack)
 					done <- false
 				}
 			}()
