@@ -419,6 +419,9 @@ func (c *Conn) handleMail(arg string) {
 	if err := c.Session().Mail(from, opts); err != nil {
 		if smtpErr, ok := err.(*SMTPError); ok {
 			c.WriteResponse(smtpErr.Code, smtpErr.EnhancedCode, smtpErr.Message)
+			if smtpErr.Code == 250 {
+				c.fromReceived = true
+			}
 			return
 		}
 		c.WriteResponse(451, EnhancedCode{4, 0, 0}, err.Error())
@@ -507,6 +510,9 @@ func (c *Conn) handleRcpt(arg string) {
 	if err := c.Session().Rcpt(recipient); err != nil {
 		if smtpErr, ok := err.(*SMTPError); ok {
 			c.WriteResponse(smtpErr.Code, smtpErr.EnhancedCode, smtpErr.Message)
+			if smtpErr.Code == 250 {
+				c.recipients = append(c.recipients, recipient)
+			}
 			return
 		}
 		c.WriteResponse(451, EnhancedCode{4, 0, 0}, err.Error())
