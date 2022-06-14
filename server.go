@@ -90,12 +90,14 @@ func NewServer(be Backend) *Server {
 						return errors.New("Identities not supported")
 					}
 
-					sess := conn.Session()
-					if sess == nil {
-						panic("No session when AUTH is called")
+					state := conn.State()
+					session, err := be.Login(&state, username, password)
+					if err != nil {
+						return err
 					}
 
-					return sess.AuthPlain(username, password)
+					conn.SetSession(session)
+					return nil
 				})
 			},
 		},

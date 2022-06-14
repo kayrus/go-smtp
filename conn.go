@@ -236,60 +236,56 @@ func (c *Conn) protocolError(code int, ec EnhancedCode, msg string) {
 
 // GREET state -> waiting for HELO
 func (c *Conn) handleGreet(enhanced bool, arg string) {
-	domain, err := parseHelloArgument(arg)
-	if err != nil {
-		c.WriteResponse(501, EnhancedCode{5, 5, 2}, "Domain/address argument required for HELO")
-		return
-	}
-	c.helo = domain
-
-	sess, err := c.server.Backend.NewSession(c.State())
-	if err != nil {
-		if smtpErr, ok := err.(*SMTPError); ok {
-			c.WriteResponse(smtpErr.Code, smtpErr.EnhancedCode, smtpErr.Message)
+	if !enhanced {
+		domain, err := parseHelloArgument(arg)
+		if err != nil {
+			c.WriteResponse(501, EnhancedCode{5, 5, 2}, "Domain/address argument required for HELO")
 			return
 		}
-		c.WriteResponse(451, EnhancedCode{4, 0, 0}, err.Error())
-		return
-	}
-	c.SetSession(sess)
+		c.helo = domain
 
-	if !enhanced {
 		c.WriteResponse(250, EnhancedCode{2, 0, 0}, fmt.Sprintf("Hello %s", domain))
-		return
-	}
-
-	caps := []string{}
-	caps = append(caps, c.server.caps...)
-	if _, isTLS := c.TLSConnectionState(); c.server.TLSConfig != nil && !isTLS {
-		caps = append(caps, "STARTTLS")
-	}
-	if c.authAllowed() {
-		authCap := "AUTH"
-		for name := range c.server.auths {
-			authCap += " " + name
+	} else {
+		domain, err := parseHelloArgument(arg)
+		if err != nil {
+			c.WriteResponse(501, EnhancedCode{5, 5, 2}, "Domain/address argument required for EHLO")
+			return
 		}
 
-		caps = append(caps, authCap)
-	}
-	if c.server.EnableSMTPUTF8 {
-		caps = append(caps, "SMTPUTF8")
-	}
-	if _, isTLS := c.TLSConnectionState(); isTLS && c.server.EnableREQUIRETLS {
-		caps = append(caps, "REQUIRETLS")
-	}
-	if c.server.EnableBINARYMIME {
-		caps = append(caps, "BINARYMIME")
-	}
-	if c.server.MaxMessageBytes > 0 {
-		caps = append(caps, fmt.Sprintf("SIZE %v", c.server.MaxMessageBytes))
-	} else {
-		caps = append(caps, "SIZE")
-	}
+		c.helo = domain
 
-	args := []string{"Hello " + domain}
-	args = append(args, caps...)
-	c.WriteResponse(250, NoEnhancedCode, args...)
+		caps := []string{}
+		caps = append(caps, c.server.caps...)
+		if _, isTLS := c.TLSConnectionState(); c.server.TLSConfig != nil && !isTLS {
+			caps = append(caps, "STARTTLS")
+		}
+		if c.authAllowed() {
+			authCap := "AUTH"
+			for name := range c.server.auths {
+				authCap += " " + name
+			}
+
+			caps = append(caps, authCap)
+		}
+		if c.server.EnableSMTPUTF8 {
+			caps = append(caps, "SMTPUTF8")
+		}
+		if _, isTLS := c.TLSConnectionState(); isTLS && c.server.EnableREQUIRETLS {
+			caps = append(caps, "REQUIRETLS")
+		}
+		if c.server.EnableBINARYMIME {
+			caps = append(caps, "BINARYMIME")
+		}
+		if c.server.MaxMessageBytes > 0 {
+			caps = append(caps, fmt.Sprintf("SIZE %v", c.server.MaxMessageBytes))
+		} else {
+			caps = append(caps, "SIZE")
+		}
+
+		args := []string{"Hello " + domain}
+		args = append(args, caps...)
+		c.WriteResponse(250, NoEnhancedCode, args...)
+	}
 }
 
 // READY state -> waiting for MAIL
@@ -301,6 +297,22 @@ func (c *Conn) handleMail(arg string) {
 	if c.bdatPipe != nil {
 		c.WriteResponse(502, EnhancedCode{5, 5, 1}, "MAIL not allowed during message transfer")
 		return
+	}
+
+	if c.Session() == nil {
+		state := c.State()
+		session, err := c.server.Backend.AnonymousLogin(&state)
+		if err != nil {
+			if smtpErr, ok := err.(*SMTPError); ok {
+				c.WriteResponse(smtpErr.Code, smtpErr.EnhancedCode, smtpErr.Message)
+			} else {
+				c.WriteResponse(502, EnhancedCode{5, 7, 0}, err.Error())
+			}
+			return
+		}
+
+		c.SetSession(session)
+		c.didAuth = true
 	}
 
 	if len(arg) < 6 || strings.ToUpper(arg[0:5]) != "FROM:" {
@@ -578,8 +590,10 @@ func (c *Conn) handleAuth(arg string) {
 		}
 	}
 
-	c.WriteResponse(235, EnhancedCode{2, 0, 0}, "Authentication succeeded")
-	c.didAuth = true
+	if c.Session() != nil {
+		c.WriteResponse(235, EnhancedCode{2, 0, 0}, "Authentication succeeded")
+		c.didAuth = true
+	}
 }
 
 func (c *Conn) handleStartTLS() {

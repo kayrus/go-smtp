@@ -19,7 +19,13 @@ var (
 
 // A SMTP server backend.
 type Backend interface {
-	NewSession(c ConnectionState) (Session, error)
+	// Authenticate a user. Return smtp.ErrAuthUnsupported if you don't want to
+	// support this.
+	Login(state *ConnectionState, username, password string) (Session, error)
+
+	// Called if the client attempts to send mail without logging in first.
+	// Return smtp.ErrAuthRequired if you don't want to support this.
+	AnonymousLogin(state *ConnectionState) (Session, error)
 }
 
 type BodyType string
@@ -68,9 +74,6 @@ type Session interface {
 
 	// Free all resources associated with session.
 	Logout() error
-
-	// Authenticate the user using SASL PLAIN.
-	AuthPlain(username, password string) error
 
 	// Set return path for currently processed message.
 	Mail(from string, opts *MailOptions) error
