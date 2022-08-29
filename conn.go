@@ -624,7 +624,12 @@ func (c *Conn) handleStartTLS() {
 
 	// Upgrade to TLS
 	tlsConn := tls.Server(c.conn, c.server.TLSConfig)
-
+	if t := c.server.ReadTimeout; t != 0 {
+		tlsConn.SetReadDeadline(time.Now().Add(t))
+	}
+	if t := c.server.WriteTimeout; t != 0 {
+		tlsConn.SetWriteDeadline(time.Now().Add(t))
+	}
 	if err := tlsConn.Handshake(); err != nil {
 		if err == io.EOF {
 			return
@@ -983,8 +988,8 @@ func (c *Conn) greet() {
 
 func (c *Conn) WriteResponse(code int, enhCode EnhancedCode, text ...string) {
 	// TODO: error handling
-	if c.server.WriteTimeout != 0 {
-		c.conn.SetWriteDeadline(time.Now().Add(c.server.WriteTimeout))
+	if t := c.server.WriteTimeout; t != 0 {
+		c.conn.SetWriteDeadline(time.Now().Add(t))
 	}
 
 	// All responses must include an enhanced code, if it is missing - use
@@ -1011,8 +1016,8 @@ func (c *Conn) WriteResponse(code int, enhCode EnhancedCode, text ...string) {
 
 // Reads a line of input
 func (c *Conn) ReadLine() (string, error) {
-	if c.server.ReadTimeout != 0 {
-		if err := c.conn.SetReadDeadline(time.Now().Add(c.server.ReadTimeout)); err != nil {
+	if t := c.server.ReadTimeout; t != 0 {
+		if err := c.conn.SetReadDeadline(time.Now().Add(t)); err != nil {
 			return "", err
 		}
 	}

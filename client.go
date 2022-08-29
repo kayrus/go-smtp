@@ -152,8 +152,10 @@ func (c *Client) InitConn(conn net.Conn) error {
 	c.setConn(conn)
 
 	// Set initial greeting timeout.
-	c.conn.SetDeadline(time.Now().Add(c.CommandTimeout))
-	defer c.conn.SetDeadline(time.Time{})
+	if t := c.CommandTimeout; t > 0 {
+		c.conn.SetDeadline(time.Now().Add(t))
+		defer c.conn.SetDeadline(time.Time{})
+	}
 
 	_, _, err := c.Text.ReadResponse(220)
 	if err != nil {
@@ -205,8 +207,10 @@ func (c *Client) Hello(localName string) error {
 // cmd is a convenience function that sends a command and returns the response
 // textproto.Error returned by c.Text.ReadResponse is converted into SMTPError.
 func (c *Client) cmd(expectCode int, format string, args ...interface{}) (int, string, error) {
-	c.conn.SetDeadline(time.Now().Add(c.CommandTimeout))
-	defer c.conn.SetDeadline(time.Time{})
+	if t := c.CommandTimeout; t > 0 {
+		c.conn.SetDeadline(time.Now().Add(t))
+		defer c.conn.SetDeadline(time.Time{})
+	}
 
 	id, err := c.Text.Cmd(format, args...)
 	if err != nil {
@@ -444,8 +448,10 @@ type dataCloser struct {
 func (d *dataCloser) Close() error {
 	d.WriteCloser.Close()
 
-	d.c.conn.SetDeadline(time.Now().Add(d.c.SubmissionTimeout))
-	defer d.c.conn.SetDeadline(time.Time{})
+	if t := d.c.SubmissionTimeout; t > 0 {
+		d.c.conn.SetDeadline(time.Now().Add(t))
+		defer d.c.conn.SetDeadline(time.Time{})
+	}
 
 	if !d.c.lmtp {
 		code, msg, err := d.c.Text.ReadResponse(250)
