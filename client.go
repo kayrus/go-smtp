@@ -402,7 +402,9 @@ func (c *Client) StartTLS(config *tls.Config) error {
 	}
 
 	c.setConn(conn)
-	return c.ehlo()
+	c.didHello = false
+
+	return nil
 }
 
 // TLSConnectionState returns the client's TLS connection state.
