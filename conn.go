@@ -631,6 +631,10 @@ func (c *Conn) handleStartTLS() {
 		tlsConn.SetWriteDeadline(time.Now().Add(t))
 	}
 	if err := tlsConn.Handshake(); err != nil {
+		// Close a TCP connection on failed StartTLS. This should
+		// indicate an SMTP client that TLSv1.3 handshake failed on the
+		// server side. See https://github.com/golang/go/issues/56371
+		defer c.Close()
 		if err == io.EOF {
 			return
 		}
